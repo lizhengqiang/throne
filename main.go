@@ -3,13 +3,18 @@ package main
 import (
 	"github.com/go-macaron/session"
 	"gopkg.in/macaron.v1"
-	"qiniupkg.com/x/log.v7"
 	"throne/game"
 	"throne/v1"
-	"fmt"
+	"throne/game/command"
 )
 
+var Game *game.Game;
+
 func PlayerHandler(ctx *macaron.Context, sess session.Store) {
+	if p := Game.FindPlayer(ctx.Params("player")); p != nil {
+		ctx.Map(p)
+		return
+	}
 	player, ok := sess.Get("Player").(*game.Player)
 
 	if !ok {
@@ -21,48 +26,53 @@ func PlayerHandler(ctx *macaron.Context, sess session.Store) {
 	return
 }
 
-func main() {
-
-	g := v1.NewGame()
-
-	m := macaron.Classic()
-	m.Use(session.Sessioner())
-
-	m.Get("/player", func(ctx *macaron.Context, sess session.Store) string {
-
+func RegisterCommands(m *macaron.Macaron) {
+	g := Game
+	m.Get("/player", func(ctx *macaron.Context, sess session.Store) {
 		player, ok := sess.Get("Player").(*game.Player)
-
 		if !ok || player == nil {
 			player = g.GetPlayer()
 			sess.Set("Player", player)
 		}
-
-		log.Println(player)
 		if player != nil {
-
-			return "角色:" + player.Name
+			ctx.JSON(200, player)
+			return
 		}
-
-		return "没有角色"
+		ctx.JSON(400, nil)
+		return
 
 	})
 
-	m.Get("/areas", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) string {
-
-		return fmt.Sprintf("%+v", player.Game.Map.Areas)
+	m.Get("/areas", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) {
+		ctx.JSON(200, game.AreasSlice(player.Game.Map.Areas))
 	})
 
-	m.Get("/wars", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) string {
-		return fmt.Sprintf("%+v", player.Wars)
+	m.Get("/war", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) {
+		if g.War == nil {
+			ctx.JSON(200, nil)
+			return
+		}
+		wm, _ := g.War.Marshal()
+		ctx.JSON(200, wm)
 	})
 
-	m.Get("/help/:dst/attacker", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) string {
+	m.Get("/war/help/attacker", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) string {
+		war := g.War
+		war.HelpAttacker(player)
+		return "ok"
+	})
+
+	m.Get("/war/help//defender", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) string {
+		war := g.War
+		war.HelpDefender(player)
+		return "ok"
+	})
+
+	m.Get("/war/back/:dst", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) string {
+		war := g.War
 		dst := g.FindArea(ctx.Params("dst"))
-		player.Wars
-	})
-
-	m.Get("/help/:dst/defender", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) string {
-		return fmt.Sprintf("%+v", player.Wars)
+		war.SetDst(dst)
+		return "ok"
 	})
 	m.Get("/:src/attack/:dst", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) string {
 		//soldiers := ctx.Query("soldiers")
@@ -70,8 +80,52 @@ func main() {
 		src := g.FindArea(ctx.Params("src"))
 		dst := g.FindArea(ctx.Params("dst"))
 		go src.ConsumeAttack(dst, src.SelectAllSoldiers(), stayControl)
-		return "OK"
+		return "ok"
 	})
+	m.Get("/:src/select", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) {
+		src := g.FindArea(ctx.Params("src"))
+		ctx.JSON(200, src.AroundCanMove())
+	})
+	m.Get("/set/:src/:cmd", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) string {
+		src := g.FindArea(ctx.Params("src"))
+		err := player.Set(src, game.InitCommand(command.Type(ctx.ParamsInt64("cmd")), false, player))
+		if err != nil {
+			return err.Error()
+		}
+		return "ok"
+	})
+
+	m.Get("/set/finish", PlayerHandler, func(ctx *macaron.Context, sess session.Store, player *game.Player) string {
+		err := player.FinishSet()
+		if err != nil {
+			return err.Error()
+		}
+
+		return "ok"
+	})
+}
+
+func main() {
+
+	g := v1.NewGame()
+	Game = g
+
+	m := macaron.Classic()
+	m.Use(session.Sessioner())
+	m.Use(macaron.Static("./templates"))
+	m.Use(macaron.Renderer(macaron.RenderOptions{
+		Delims:macaron.Delims{"<<", ">>"},
+	}))
+	m.Get("/game", PlayerHandler, func(ctx *macaron.Context) {
+		ctx.JSON(200, g)
+	})
+	m.Get("/players", func(ctx *macaron.Context) {
+		ctx.JSON(200, game.Players(g.Players))
+	})
+	m.Group("/:player", func() {
+		RegisterCommands(m)
+	})
+
 	m.Run()
 
 	//go func() {

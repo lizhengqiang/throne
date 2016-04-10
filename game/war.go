@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	"qiniupkg.com/x/errors.v7"
 	"qiniupkg.com/x/log.v7"
@@ -8,24 +9,37 @@ import (
 )
 
 type War struct {
-	Game                 *Game
+	Game                 *Game `json:"-"`
 	Area                 *Area
 	Attacker             *Player
 	Defender             *Player
 	Winner               *Player
 	AttackerSoldiers     []*Soldier
 	DefenderSoldiers     []*Soldier // 失败方战败退出的士兵
-	Helpers              map[*Area]interface{}
-	AttackerHelpers      map[*Area]interface{}
-	DefenderHelpers      map[*Area]interface{}
+	Helpers              map[*Area]interface{} `json:"-"`
+	AttackerHelpers      map[*Area]interface{} `json:"-"`
+	DefenderHelpers      map[*Area]interface{} `json:"-"`
 	AttackerSrc          *Area
 	DefenderDst          *Area      // 为空表示防守方胜利,否则为失败方将要退向的地区
-	HelperWaitGroup      *utils.WaitGroup
-	DefenderDstWaitGroup *utils.WaitGroup
+	HelperWaitGroup      *utils.WaitGroup `json:"-"`
+	DefenderDstWaitGroup *utils.WaitGroup `json:"-"`
 }
 
 func (w *War) String() string {
 	return fmt.Sprintln(w.Area) + fmt.Sprintln(w.Helpers) + fmt.Sprintln(w.Attacker) + fmt.Sprintln(w.AttackerSoldiers) + fmt.Sprintln(w.AttackerHelpers)
+}
+
+func (w *War) SetDst(area *Area) {
+	// 死亡
+	if area == w.Area {
+		w.DefenderDst = w.Defender.PreArea
+		w.DefenderDstWaitGroup.Done()
+		return
+	}
+	// 退到目的地
+	w.DefenderDst = area
+	w.DefenderDstWaitGroup.Done()
+	return
 }
 
 func (w *War) CalcAttacker() (r int64) {
@@ -92,7 +106,9 @@ var DefenderDstNotSet error = errors.New("防守方尚未设置撤退目的地")
 
 func (w *War) Finish() error {
 	// 处理了一个战争
-
+	defer func() {
+		w.Game.War = nil
+	}()
 	defer w.Area.MoveWaitGroup.Done()
 	defer log.Println("有一个战争处理完了")
 
@@ -117,32 +133,53 @@ func (w *War) Finish() error {
 	return nil
 
 }
-func (w *War)Handle() {
+func (w *War) Handle() {
 	log.Println("有一个战争正在处理")
 	w.HelperWaitGroup.Wait()
 	w.Fight()
 	if w.Winner == w.Attacker {
+		log.Println("进攻方胜利")
+		w.DefenderDstWaitGroup.Add(1)
 		w.DefenderDstWaitGroup.Wait()
 	}
 	w.Finish()
 }
 
+func (w *War) Marshal() (m map[string]interface{}, err error) {
+	m = map[string]interface{}{}
+	bytes, err := json.Marshal(w)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(bytes, &m)
+	if err != nil {
+		return
+	}
+
+	m["Helpers"] = Areas(w.Helpers)
+	m["AttackerHelpers"] = Areas(w.AttackerHelpers)
+	m["DefenderHelpers"] = Areas(w.DefenderHelpers)
+	return
+}
+
 func InitWar(player *Player, src *Area, dst *Area, soldiers []*Soldier) (w *War) {
-
-
 
 	// 有一个战争要处理
 	log.Println("有一个战争要处理")
 	dst.MoveWaitGroup.Add(1)
-
 	w = &War{
-		Game:             player.Game,
-		Area:             dst,
-		Attacker:         player,
-		Defender:         dst.Belong,
-		AttackerSoldiers: soldiers,
-		DefenderSoldiers: dst.Soldiers,
-		AttackerSrc:      src,
+		Game:                 player.Game,
+		Area:                 dst,
+		Attacker:             player,
+		Defender:             dst.Belong,
+		AttackerSoldiers:     soldiers,
+		DefenderSoldiers:     dst.Soldiers,
+		AttackerSrc:          src,
+		Helpers:              map[*Area]interface{}{},
+		AttackerHelpers:      map[*Area]interface{}{},
+		DefenderHelpers:      map[*Area]interface{}{},
+		HelperWaitGroup:      utils.InitWaitGroup(),
+		DefenderDstWaitGroup: utils.InitWaitGroup(),
 	}
 	// 找到周边区域
 	w.Helpers = dst.Helpers()
@@ -150,16 +187,8 @@ func InitWar(player *Player, src *Area, dst *Area, soldiers []*Soldier) (w *War)
 	w.HelperWaitGroup.Add(len(w.Helpers))
 	w.AttackerHelpers = map[*Area]interface{}{}
 	w.DefenderHelpers = map[*Area]interface{}{}
-	// 战争通知到进攻方
-	player.Wars[w] = w
-	// 战争通知到防守方
-	w.Area.Belong.Wars[w] = w
-	// 通知支援方
-	for a, _ := range w.Helpers {
-		a.Belong.Wars[w] = w
-	}
 	// 存入游戏
-	w.Game.Wars[w] = nil
+	w.Game.War = w
 	return
 
 }

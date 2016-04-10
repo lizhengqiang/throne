@@ -4,55 +4,37 @@ import (
 	"throne/game"
 	"throne/game/player"
 	"throne/game/soldier"
-	"fmt"
-	"throne/game/command"
 	"throne/game/area"
 	"throne/game/resource"
 )
 
 func NewGame() *game.Game {
 	g := game.InitGame()
-	mainPlayer := game.InitPlayer(g, "正强")
-	secondPlayer := game.InitPlayer(g, "电脑")
+	GreyjoyPlayer := game.InitPlayer(g, "Greyjoy")
+	TyrellPlayer := game.InitPlayer(g, "Tyrell")
 	// 初始化地图
-	mainLand := game.InitArea(g, "主城", area.Land, mainPlayer, []*game.Resource{game.InitResource(resource.City)})
-	sLand := game.InitArea(g, "副城", area.Land, secondPlayer, []*game.Resource{game.InitResource(resource.City)})
-	tLand := game.InitArea(g, "小城", area.Land, secondPlayer, []*game.Resource{game.InitResource(resource.City)})
-	mainSea := game.InitArea(g, "主海", area.Sea, nil, []*game.Resource{})
-	secondSea := game.InitArea(g, "副海", area.Sea, nil, []*game.Resource{})
+	PaikeIsland := game.InitArea(g, "派克岛", area.Land, GreyjoyPlayer, []*game.Resource{game.InitResource(resource.City), game.InitResource(resource.Supply), game.InitResource(resource.Money)})
+	Gaoting := game.InitArea(g, "高庭", area.Land, TyrellPlayer, []*game.Resource{game.InitResource(resource.City), game.InitResource(resource.Supply), game.InitResource(resource.Supply)})
+	HewanLand := game.InitArea(g, "河湾地", area.Land, nil, []*game.Resource{game.InitResource(resource.City)})
+	TieminSea := game.InitArea(g, "铁民湾", area.Sea, nil, []*game.Resource{game.InitResource(resource.Town)})
+	XixiaSea := game.InitArea(g, "西夏海", area.Sea, nil, []*game.Resource{})
+	RiluoSea := game.InitArea(g, "日落之海", area.Sea, nil, []*game.Resource{})
 	// 关联
-	mainLand.AddAround(mainSea)
-	sLand.AddAround(secondSea)
-	sLand.AddAround(tLand)
-	mainSea.AddAround(secondSea)
+	RiluoSea.AddAround(TieminSea).AddAround(XixiaSea)
+	PaikeIsland.AddAround(TieminSea)
+	Gaoting.AddAround(XixiaSea).AddAround(HewanLand)
 	// 添加
-	g.Map.AddArea(mainLand)
-	g.Map.AddArea(sLand)
-	g.Map.AddArea(tLand)
-	g.Map.AddArea(mainSea)
-	g.Map.AddArea(secondSea)
+	g.Map.AddArea(PaikeIsland).AddArea(Gaoting).AddArea(TieminSea).AddArea(XixiaSea).AddArea(HewanLand).AddArea(RiluoSea)
 	// 初始化角色
-	mainPlayer.SetOrder(player.OrderA, 2)
-	secondPlayer.SetOrder(player.OrderA, 1)
-	g.AddPlayer(mainPlayer)
-	g.AddPlayer(secondPlayer)
+	GreyjoyPlayer.SetOrder(player.OrderA, 1)
+	TyrellPlayer.SetOrder(player.OrderA, 2)
+	g.AddPlayer(GreyjoyPlayer)
+	g.AddPlayer(TyrellPlayer)
 	// 初始化兵力
-	mainLand.Enter(mainPlayer, []*game.Soldier{game.InitSoldier(soldier.Cavalry), game.InitSoldier(soldier.Foot)})
-	mainSea.Enter(mainPlayer, []*game.Soldier{game.InitSoldier(soldier.Ship), game.InitSoldier(soldier.Ship)})
-	secondSea.Enter(mainPlayer, []*game.Soldier{game.InitSoldier(soldier.Ship), game.InitSoldier(soldier.Ship)})
-	sLand.Enter(secondPlayer, []*game.Soldier{game.InitSoldier(soldier.Cavalry), game.InitSoldier(soldier.Cavalry)})
-
-	fmt.Println(g)
-
-	// 放置指令
-	mainLand.PutCommand(game.InitCommand(command.Attack, false, mainPlayer))
-	mainSea.PutCommand(game.InitCommand(command.Help, false, mainPlayer))
-	secondSea.PutCommand(game.InitCommand(command.Help, false, mainPlayer))
-	sLand.PutCommand(game.InitCommand(command.Attack, false, secondPlayer))
-	tLand.PutCommand(game.InitCommand(command.Help, false, secondPlayer))
-
-	fmt.Println(g)
-
+	PaikeIsland.Enter(GreyjoyPlayer, []*game.Soldier{game.InitSoldier(soldier.Cavalry), game.InitSoldier(soldier.Foot)})
+	TieminSea.Enter(GreyjoyPlayer, []*game.Soldier{game.InitSoldier(soldier.Ship), game.InitSoldier(soldier.Ship)})
+	Gaoting.Enter(TyrellPlayer, []*game.Soldier{game.InitSoldier(soldier.Cavalry), game.InitSoldier(soldier.Foot)})
+	XixiaSea.Enter(TyrellPlayer, []*game.Soldier{game.InitSoldier(soldier.Ship)})
 	go g.Begin()
 
 	return g

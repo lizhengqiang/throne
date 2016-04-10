@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- 新 Bootstrap 核心 CSS 文件 -->
+    <link rel="stylesheet" href="//cdn.bootcss.com/bootstrap/3.3.5/css/bootstrap.min.css">
+
+    <!-- 可选的Bootstrap主题文件（一般不用引入） -->
+    <link rel="stylesheet" href="//cdn.bootcss.com/bootstrap/3.3.5/css/bootstrap-theme.min.css">
+
+    <!-- jQuery文件。务必在bootstrap.min.js 之前引入 -->
+    <script src="//cdn.bootcss.com/jquery/1.11.3/jquery.min.js"></script>
+
+    <!-- 最新的 Bootstrap 核心 JavaScript 文件 -->
+    <script src="//cdn.bootcss.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+
+    <script src="//cdnjs.cloudflare.com/ajax/libs/vue/1.0.21/vue.min.js"></script>
+
+    <script src="/echarts.js"></script>
+    <script src="/const.js"></script>
+    <script src="/map.js"></script>
+
+    <title>Throne</title>
+</head>
+<body>
+
+<div id="throne" class="container">
+    <h2>Throne</h2>
+    <p> 第{{game.Round}}回合,{{game.Stage | stage}}阶段,铁王座第{{game.Order}}位移动</p>
+    <div class="row">
+        <div class="list-group">
+            <a v-on:click="setPlayer(item.Name)"
+               v-bind:class="['list-group-item', {'active' : item.Name == player.Name}]" v-for="item in players">
+                <h4 class="list-group-item-heading">{{item.Name}}</h4>
+                <p class="list-group-item-text">铁王座顺序:{{item.OrderA}}</p>
+                <p class="list-group-item-text">权利标记:{{item.Money}}</p>
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div id="map" style="height:400px">
+
+        </div>
+
+        <p><a class="btn btn-primary" v-on:click="finishPut()">完成放置</a></p>
+
+    </div>
+
+    <div class="row">
+
+        <div class="list-group">
+            <div class="list-group-item" v-if="war">
+                <h4 class="list-group-item-heading">#{{war.Area.Id}}({{war.Area.Name}})</h4>
+                <p class="list-group-item-text">{{war.Attacker.Name}} -> {{war.Defender.Name}}</p>
+                <a class="btn btn-primary" v-on:click="help('attacker')">支援进攻方</a>
+                <a class="btn btn-primary" v-on:click="help('defender')">支援防守方</a>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+
+        <div class="list-group">
+            <div v-bind:class="['list-group-item']" v-for="area in areas">
+                <h4 class="list-group-item-heading">#{{area.Id}}({{area.Name}})</h4>
+                <p class="list-group-item-text">拥有者:{{area.Belong.Name}}</p>
+                <p class="list-group-item-text">
+                    部队规模:
+                    <strong v-for="soldier in area.Soldiers">{{soldier | soldier}};</strong>
+                </p>
+                <p class="list-group-item-text">
+                    资源:
+                    <strong v-for="resource in area.Resources">{{resource | resource}};</strong>
+                </p>
+                <p class="list-group-item-text">行动指令:{{area.Command | command}}</p>
+                <p v-if="game.Stage == Stages.Move ">
+                    <a class="btn btn-primary"
+                       v-if="select === null && area.Belong.Name === player.Name && area.Command !== null && area.Command.Type === Commands.Attack"
+                       v-on:click="leave(area)">选择</a>
+                    <a class="btn btn-primary" v-if="select !== null && inAreas(area, select.around)"
+                       v-on:click="enter(area)">进攻</a>
+                    <a class="btn btn-primary"
+                       v-if="war.Defender.Name === player.Name && war.Winner.Name !== player.Name && war.DefenderDst === null"
+                       v-on:click="back(area)">退回</a>
+                </p>
+                <p v-if="game.Stage == Stages.Set && area.Belong.Name == player.Name && area.Command === null && area.Soldiers.length > 0">
+                    <a class="btn btn-primary" v-on:click="put(area, Commands.Attack)">进攻</a>
+                    <a class="btn btn-primary" v-on:click="put(area, Commands.Help)">支援</a>
+                    <a class="btn btn-primary" v-on:click="put(area, Commands.Steal)">偷袭</a>
+                    <a class="btn btn-primary" v-on:click="put(area, Commands.Defend)">防守</a>
+                    <a class="btn btn-primary" v-on:click="put(area, Commands.Money)">巩固</a>
+                </p>
+            </div>
+        </div>
+    </div>
+    <script>
+        $(function () {
+            throne.loadGame()
+            registerMap(throne);
+            setTimeout(throne.loadGame, 3000);
+        });
+    </script>
+    <script src="/throne.js"></script>
+</div>
+</body>
+</html>
